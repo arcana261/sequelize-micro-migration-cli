@@ -1,0 +1,41 @@
+{
+  "name": "sequelize-micro-migration-cli",
+  "version": "0.1.0",
+  "description": "A CLI/TUI interface for sequelize-micro-migration.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arcana261/sequelize-micro-migration-cli.git"
+  },
+  "keywords": [
+    "sequelize",
+    "migration",
+    "cli",
+    "tui"
+  ],
+  "engines": {
+    "node": ">=4.4.6"
+  },
+  "author": "Mohamad mehdi Kharatizadeh",
+  "license": "LGPL-3.0",
+  "bugs": {
+    "url": "https://github.com/arcana261/sequelize-micro-migration-cli/issues"
+  },
+  "homepage": "https://github.com/arcana261/sequelize-micro-migration-cli#readme",
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "eslint": "^3.7.0",
+    "jsdoc": "^3.4.1",
+    "mocha": "^3.1.0",
+    "sequelize": "^3.24.3",
+    "sequelize-micro-migration": "arcana261/sequelize-micro-migration",
+    "sqlite3": "^3.1.4"
+  },
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "xcane": "arcana261/xcane"
+  }
+}
