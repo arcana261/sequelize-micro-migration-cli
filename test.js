@@ -89,18 +89,19 @@ overrideFs._storage[path.join(__dirname, filesSorted[3].replace(/\.js$/g, ''))] 
 const sequelize = new Sequelize({
   dialect: 'sqlite',
   storage: ':memory:',
-  benchmark: true
+  benchmark: true,
+  logging: t => {}
 });
 MicroMigration._overrideFs(overrideFs);
 MicroMigration._overrideRequire(overrideFs._require);
 const migration = new MicroMigration(sequelize, 'myapp', __dirname);
 overrideFs._lastDir = null;
 overrideFs._upped = {};
+overrideFs._files = filesSorted;
 
 task.spawn(function* () {
   yield sequelize.sync();
   MicroMigrationCli.watch(migration);
 
-  const app = yield MicroMigrationCli._selectApplication();
-  yield MicroMigrationCli._showCurrentVersion(app);
+  yield MicroMigrationCli._mainMenu();
 }).then(() => console.log('done!')).catch(err => console.log(err));
