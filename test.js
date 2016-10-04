@@ -5,6 +5,7 @@ const MicroMigration = require('sequelize-micro-migration');
 const MicroMigrationCli = require('./index');
 const task = require('xcane').task;
 const path = require('path');
+const promise = require('xcane').promise;
 
 let overrideFs = {
   _files: [],
@@ -36,11 +37,13 @@ overrideFs._storage[path.join(__dirname, filesSorted[0].replace(/\.js$/g, ''))] 
     });
 
     overrideFs._upped[filesSorted[0]] = true;
+    yield promise.delay(500);
   }),
 
   down: (queryInterface, sequelize) => task.spawn(function* () {
     yield queryInterface.dropTable('people');
     overrideFs._upped[filesSorted[0]] = false;
+    yield promise.delay(500);
   })
 };
 
@@ -50,11 +53,13 @@ overrideFs._storage[path.join(__dirname, filesSorted[1].replace(/\.js$/g, ''))] 
       type: Sequelize.TEXT
     });
     overrideFs._upped[filesSorted[1]] = true;
+    yield promise.delay(500);
   }),
 
   down: (queryInterface, sequelize) => task.spawn(function* () {
     yield queryInterface.removeColumn('people', 'name');
     overrideFs._upped[filesSorted[1]] = false;
+    yield promise.delay(500);
   })
 };
 
@@ -64,11 +69,13 @@ overrideFs._storage[path.join(__dirname, filesSorted[2].replace(/\.js$/g, ''))] 
       type: Sequelize.INTEGER
     });
     overrideFs._upped[filesSorted[2]] = true;
+    yield promise.delay(500);
   }),
 
   down: (queryInterface, sequelize) => task.spawn(function* () {
     yield queryInterface.removeColumn('people', 'age');
     overrideFs._upped[filesSorted[2]] = false;
+    yield promise.delay(500);
   })
 };
 
@@ -76,6 +83,7 @@ overrideFs._storage[path.join(__dirname, filesSorted[3].replace(/\.js$/g, ''))] 
   up: (queryInterface, sequelize) => task.spawn(function* () {
     yield queryInterface.removeColumn('people', 'age');
     overrideFs._upped[filesSorted[3]] = true;
+    yield promise.delay(500);
   }),
 
   down: (queryInterface, sequelize) => task.spawn(function* () {
@@ -83,6 +91,7 @@ overrideFs._storage[path.join(__dirname, filesSorted[3].replace(/\.js$/g, ''))] 
       type: Sequelize.INTEGER
     });
     overrideFs._upped[filesSorted[3]] = false;
+    yield promise.delay(500);
   })
 };
 
@@ -90,7 +99,7 @@ const sequelize = new Sequelize({
   dialect: 'sqlite',
   storage: ':memory:',
   benchmark: true,
-  logging: t => {}
+  logging: t => MicroMigrationCli.log(t)
 });
 MicroMigration._overrideFs(overrideFs);
 MicroMigration._overrideRequire(overrideFs._require);
@@ -103,5 +112,7 @@ task.spawn(function* () {
   yield sequelize.sync();
   MicroMigrationCli.watch(migration);
 
-  yield MicroMigrationCli._mainMenu();
+  //yield MicroMigrationCli.mainMenu();
+  //yield MicroMigrationCli.migrateModuleMenu('myapp');
+  yield MicroMigrationCli.migrateMenu();
 }).then(() => console.log('done!')).catch(err => console.log(err));

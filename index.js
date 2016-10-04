@@ -45,7 +45,7 @@ const boxStyle = {
   }
 };
 const progress = ['-', '\\', '|', '/'];
-let logWatcher = () => {};
+let logWatchers = [() => {}];
 let escapeHandlers = [() => process.exit(0)];
 let enterHandlers = [() => {}];
 let rightHandlers = [() => {}];
@@ -79,6 +79,7 @@ class SequelizeMigrationPage {
     this._box = null;
     this._log = null;
     this._progressBar = null;
+    logWatchers.pop();
     this._screen.render();
   }
 
@@ -101,12 +102,22 @@ class SequelizeMigrationPage {
     this._log = blessed.log({
       parent: this._box,
       top: 2,
+      right: 1,
+      left: 1,
       bottom: 3,
-      style: Object.assign({}, style, {
-        fg: 'yellow',
+      tags: true,
+      scrollable: true,
+      mouse: true,
+      scrollbar: {
         track: {
-          bg: 'yellow'
+          bg: 'blue'
+        },
+        style: {
+          bg: 'red'
         }
+      },
+      style: Object.assign({}, style, {
+        fg: 'yellow'
       })
     });
 
@@ -122,6 +133,7 @@ class SequelizeMigrationPage {
       }
     });
 
+    logWatchers.push(t => this._log.log(t));
     this._screen.render();
   }
 
@@ -139,9 +151,9 @@ class SequelizeMigrationPage {
 
   add(item) {
     if (item[1] === 'up') {
-      this._log.log(`Upgrading ${item[0]}...`);
+      this._log.log(`{red-fg}Upgrading ${item[0]}...{/}`);
     } else {
-      this._log.log(`Downgrading ${item[0]}...`);
+      this._log.log(`{red-fg}Downgrading ${item[0]}...{/}`);
     }
     this._progressBar.progress(100 / this._total);
     this._screen.render();
@@ -584,19 +596,22 @@ const SequelizeMicroMigrationCli = module.exports = Object.freeze({
       }
     }),
 
-  _mainMenu: () =>
+  mainMenu: () =>
     task.spawn(function * task() {
       let cont = true;
 
       while (cont) {
         const module = yield selectFromList(
-          'Select module:', watchList.map(x => x.application));
+          'Select module:', yield iterable.async(watchList).select(x =>
+             x.requiresMigration().then(
+               y => `${y ? '[NEW] ' : ''}${x.application}`)).toArray());
 
         if (type.isOptional(module)) {
           return null;
         }
 
-        const pick = yield SequelizeMicroMigrationCli._moduleMenu(module);
+        const pick = yield SequelizeMicroMigrationCli._moduleMenu(
+          module.replace(/^\[NEW\] /, ''));
 
         if (!type.isOptional(pick)) {
           return null;
@@ -606,27 +621,39 @@ const SequelizeMicroMigrationCli = module.exports = Object.freeze({
 
   _moduleMenu: module =>
     task.spawn(function * task() {
-      const textUpgrade = 'Upgrade Database';
-      const textDowngrade = 'Downgrade Database';
-      const textCurrentVersion = 'Current Version';
-      const textMigrationReport = 'Migration Report';
-      const items = [
-        textUpgrade,
-        textDowngrade,
-        textCurrentVersion,
-        textMigrationReport
-      ];
+      const migration = moduleList[module];
 
       let cont = true;
+      let res = null;
       let where = null;
 
       while (cont) {
+        const requiresMigration = yield migration.requiresMigration();
+        const textUpgrade =
+          `${requiresMigration ? '[NEW] ' : ''}Upgrade Database`;
+        const textDowngrade = 'Downgrade Database';
+        const textCurrentVersion = 'Current Version';
+        const textMigrationReport = 'Migration Report';
+        const items = [
+          textUpgrade,
+          textDowngrade,
+          textCurrentVersion,
+          textMigrationReport
+        ];
+
         switch(yield selectFromList(`Manage ${module}`, items)) {
           case textUpgrade:
             where = yield SequelizeMicroMigrationCli._selectWhere(module, 'up');
 
             if (type.isOptional(where)) {
               break;
+            }
+
+            res = yield SequelizeMicroMigrationCli._migrate(
+              module, 'up', where);
+
+            if (!type.isOptional(res)) {
+              return res;
             }
 
             break;
@@ -636,6 +663,13 @@ const SequelizeMicroMigrationCli = module.exports = Object.freeze({
 
             if (type.isOptional(where)) {
               break;
+            }
+
+            res = yield SequelizeMicroMigrationCli._migrate(
+              module, 'down', where);
+
+            if (!type.isOptional(res)) {
+              return res;
             }
 
             break;
@@ -651,6 +685,37 @@ const SequelizeMicroMigrationCli = module.exports = Object.freeze({
       }
     }),
 
+  migrateModuleMenu: (module) =>
+    task.spawn(function * task() {
+      const migration = moduleList[module];
+
+      if (!(yield migration.requiresMigration())) {
+        return null;
+      }
+
+      const pick = yield showPrompt(`${module} migration`,
+         `Schema for module {bold}${module}{/bold} requires\n` +
+         `migration to new version.\nContinue?`, '40%', 16);
+
+      if (type.isOptional(pick)) {
+        return null;
+      }
+
+      if (pick === false) {
+        return false;
+      }
+
+      return yield SequelizeMicroMigrationCli._migrate(module, 'up', []);
+    }),
+
+  migrateMenu: () =>
+    task.spawn(function * task() {
+      for (let i = 0; i < watchList.length; i++) {
+        yield SequelizeMicroMigrationCli.migrateModuleMenu(
+          watchList[i].application);
+      }
+    }),
+
   _migrate: (module, action, where) =>
     task.spawn(function * task() {
       const migration = moduleList[module];
@@ -658,23 +723,76 @@ const SequelizeMicroMigrationCli = module.exports = Object.freeze({
 
       if (action === 'up') {
         if (where.length < 1) {
-          taskList = migration.listUp();
+          taskList = yield migration.listUp();
         } else {
-          taskList = migration.listUp(where[0]);
+          if (type.isNumeric(where[0])) {
+            taskList = yield migration.listUp(Number(where[0]));
+          } else {
+            taskList = yield migration.listUp(where[0][0]);
+          }
         }
       } else {
         if (where.length < 1) {
-          taskList = migration.listDown();
+          taskList = yield migration.listDown();
+        } else {
+          if (type.isNumeric(where[0])) {
+            taskList = yield migration.listDown(Number(where[0]));
+          } else {
+            taskList = yield migration.listDown(where[0][0]);
+          }
         }
-        // TODO: complete here
-        // TODO: complete _migate method
       }
+
+      let pick = yield selectFromList(`Review ${module} ${action}`,
+        taskList.map(x => `${x[1].toUpperCase()} ${x[0]}`));
+
+      if (type.isOptional(pick)) {
+        return null;
+      }
+
+      if (taskList.some(x => x[1] === 'down')) {
+        let pick = yield showPrompt('WARNING',
+          'Migration requires database downgrading.\n' +
+          'Continuing might result in loss of data\n' +
+          'Are you sure?', '40%', 15);
+        if (type.isOptional(pick) || pick === false) {
+          return null;
+        }
+      }
+
+      return yield SequelizeMicroMigrationCli._doMigrate(module, taskList);
+    }),
+
+  _doMigrate: (module, taskList) =>
+    task.spawn(function * task() {
+      const window = new SequelizeMigrationPage(screen, taskList.length);
+      const migration = moduleList[module];
+      window.show();
+      window.start();
+
+      for (let i = 0; i < taskList.length; i++) {
+        try {
+          yield migration.execute(taskList[i]);
+          window.add(taskList[i]);
+        } catch (err) {
+          window.error(err);
+          yield showInformation('ERROR', err.message, '40%', 12);
+          return false;
+        }
+      }
+
+      yield showInformation('Success',
+        `${module} migrated successfuly!`, '40%', 12);
+      window.stop();
+      window.hide();
+
+      return null;
     }),
 
   requiresMigration: () =>
     iterable.async(watchList).any(x => x.requiresMigration()),
 
-  log: t => logWatcher(t),
+  log: t => logWatchers[logWatchers.length - 1](t),
 
   migrate: () => task.spawn(function * task() {
     const taskList = yield iterable.async(watchList)
